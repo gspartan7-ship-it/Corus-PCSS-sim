@@ -6469,7 +6469,7 @@ three/build/three.module.js:
     subtitle(text, ms);
     if (!state.voice || Audio5.muted || !("speechSynthesis" in window)) return;
     try {
-      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.pending) window.speechSynthesis.cancel();
       voicePick = voicePick || pickVoice();
       const u = new SpeechSynthesisUtterance(text);
       if (voicePick) u.voice = voicePick;
@@ -6954,7 +6954,7 @@ three/build/three.module.js:
   }
   function afterPreShot(which) {
     if (!state.started || state.action || state.final) return;
-    if (which === "ap" && !state.pre.lat) setTimeout(() => addTalk("SURGEON", "Lateral."), 700);
+    if (which === "ap" && !state.pre.lat) setTimeout(() => addTalk("SURGEON", "LATERAL."), 700);
     else if (state.pre.ap && state.pre.lat) setTimeout(() => addTalk("SURGEON", step().tool ? "Okay. " + (state.selectedTool === step().tool ? "Let's go." : "Pass me the " + toolName(step().tool) + ".") : "Okay, mark it."), 700);
   }
   function toolName(id) { return id === "implant" ? "CAVUX cage and ALLY screw" : (TOOLS.find((x) => x.id === id) || { name: id }).name; }
@@ -7137,6 +7137,7 @@ three/build/three.module.js:
     }
     renderBasics();
     addTalk("SURGEON", surgeonPrompt());
+    if (!state.final) setTimeout(() => { if (state.started && !state.action && state.pre && !state.pre.ap) addTalk("SURGEON", "AP."); }, 2200);
     if (state.final) notify("All simulated levels and sides completed. Final three-plane verification is required.");
   }
   function finalCheck(k) {
