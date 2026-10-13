@@ -6138,6 +6138,9 @@ three/build/three.module.js:
       // ventilator: filtered noise swelling at ~12 breaths/min
       const vn = loop(noiseBuf(3, false)), bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 0.7; ventG = ctx.createGain(); ventG.gain.value = 0; vn.connect(bp).connect(ventG).connect(master);
       const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.2; lg.gain.value = 0.012; lfo.connect(lg).connect(ventG.gain); lfo.start(); ventG.gain.value = 0.012;
+      // mains hum + ventilator valve click each breath (~12/min)
+      const hum = ctx.createOscillator(), hg = ctx.createGain(); hum.frequency.value = 60; hg.gain.value = 0.006; hum.connect(hg).connect(master); hum.start();
+      setInterval(() => { if (!ctx || A.muted) return; tone(1800, 0.02, "square", 0.01); tone(240, 0.12, "sine", 0.012, 0.02); }, 5000);
       // motor whir (gated)
       motorO = ctx.createOscillator(); motorO.type = "sawtooth"; motorO.frequency.value = 140; const mf = ctx.createBiquadFilter(); mf.type = "lowpass"; mf.frequency.value = 700; motorG = ctx.createGain(); motorG.gain.value = 0; motorO.connect(mf).connect(motorG).connect(master); motorO.start();
     };
