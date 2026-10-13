@@ -21,3 +21,5 @@ Terrazzo003 (recoloured to OR speckled vinyl floor), Plaster001 (walls). Downsca
 three.js (MIT).
 
 Training simulation only. Not for clinical use.
+
+- Staff characters (people/*.glb): "Sam", "Maya", "Harper" by Innerscene (innerscene.com), CC0, built with MakeHuman/MPFB (CC0 assets); surgical cap and mask taken from Innerscene "Alex" (CC0). Retextured and optimized for this sim.
