@@ -13,6 +13,10 @@ Patient, surgeon and staff bodies: **MakeHuman base mesh and default rig + weigh
 `makehuman/data/3dobjs/base.obj`, `data/rigs/default.mhskel`, `default_weights.mhw`; LICENSE.ASSETS.md). Decimated to ~6k triangles,
 rig collapsed to 21 bones, gown/cap/mask/glove zones and gown skirt added (src/parts/mh_data.js, humans.js).
 
+## Textures
+CC0 1.0 textures from **ambientCG.com** (Lennart Demes): Fabric030 (gown/cap/mask/drape weave normal + roughness),
+Terrazzo003 (recoloured to OR speckled vinyl floor), Plaster001 (walls). Downscaled to 256–512 px. Skin pore normal map is procedural.
+
 ## Libraries
 three.js (MIT).
 
