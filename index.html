@@ -7672,7 +7672,7 @@ three/build/three.module.js:
   document.addEventListener("pointerdown", (e) => { const b = e.target.closest("[data-hold]"); if (!b) return; e.preventDefault(); holdStart(b.dataset.hold, Number(b.dataset.dir)); });
   ["pointerup", "pointercancel", "pointerleave"].forEach((ev) => document.addEventListener(ev, (e) => { if (ev !== "pointerleave" || e.target === document) holdStop(); }));
   document.addEventListener("click", (e) => {
-    const c = e.target.closest("[data-carmsel]"); if (c) { carmSel = c.dataset.carmsel; renderCtlDrawers(); if (has3D()) window.OR3D.setView(carmSel === "ap" ? "carmAP" : "carmLat"); return; }
+    const c = e.target.closest("[data-carmsel]"); if (c) { carmSel = c.dataset.carmsel; renderCtlDrawers(); return; }
     const sh = e.target.closest("[data-shoot]"); if (sh) { smartShoot(sh.dataset.shoot); setTimeout(renderCtlDrawers, 400); return; }
     if (e.target.closest("[data-bedlock]")) { state.bedLock = !state.bedLock; Audio5.chime && Audio5.chime(); renderCtlDrawers(); }
   });
@@ -7680,7 +7680,7 @@ three/build/three.module.js:
   /* ---------- immersive layout helpers ---------- */
   const IMM = !/[?&]classic=1/.test(location.search);
   if (IMM) document.body.classList.add("immersive");
-  function openDrawer(n) { document.body.dataset.drawer = document.body.dataset.drawer === n ? "" : n; Audio5.start(); if (n === "carm" || n === "bed") { renderCtlDrawers(); if (document.body.dataset.drawer && has3D()) window.OR3D.setView(n === "bed" ? "rep" : carmSel === "ap" ? "carmAP" : "carmLat"); } }
+  function openDrawer(n) { document.body.dataset.drawer = document.body.dataset.drawer === n ? "" : n; Audio5.start(); if (n === "carm" || n === "bed") { renderCtlDrawers(); if (document.body.dataset.drawer && has3D()) window.OR3D.setView("or"); } }
   function closeDrawer() { document.body.dataset.drawer = ""; }
   function immersiveView() { if (has3D() && IMM) { window.OR3D.immersive = true; window.OR3D.setView("rep"); } }
   function doNext() {
