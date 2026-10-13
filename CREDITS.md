@@ -1,0 +1,14 @@
+# Credits & licenses
+
+## Anatomy meshes
+Cervical vertebrae C1–T1, C3–T1 intervertebral discs, clavicles and first ribs:
+**BodyParts3D, Copyright (c) 2008 Life Science Integrated Database Center (DBCLS), licensed under CC BY-SA 2.1 Japan**
+(https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en). Source: http://lifesciencedb.jp/bp3d/ (STL mirror:
+https://github.com/Kevin-Mattheus-Moerman/BodyParts3D). FMA IDs: 12519–12525, 9165, 13322, 13323, 7857, 7987, 13896–13900.
+Modifications: decimated (~3.6k triangles per vertebra), re-oriented to the sim frame, lordosis straightened and
+scaled, quantized to 16-bit and embedded. Per CC BY-SA, these modified meshes (src/parts/bp3d_data.js) are shared under CC BY-SA 2.1 JP.
+
+## Libraries
+three.js (MIT).
+
+Training simulation only. Not for clinical use.
