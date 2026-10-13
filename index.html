@@ -6967,9 +6967,13 @@ three/build/three.module.js:
     const val = Math.max(-lim, Math.min(lim, (state.adjust[key] || 0) + dir));
     if (val === state.adjust[key]) return;
     state.adjust[key] = val; Audio5.motor();
-    if (state.pre && !state.action) state.pre = { ap: false, lat: false };
-    state.held = { ap: !!(state.shotM && state.shotM.ap), lat: !!(state.shotM && state.shotM.lat) };
-    state.reviews = { ap: false, lat: false, oblique: false };
+    // only the plane(s) this control affects need a re-shoot
+    const latOnly = ["lat", "wag", "base", "latLift", "latIn", "latTilt", "latBase"].includes(key), apOnly = /^ap/.test(key);
+    const hitAP = !latOnly, hitLat = !apOnly;
+    if (state.pre && !state.action) state.pre = { ap: hitAP ? false : state.pre.ap, lat: hitLat ? false : state.pre.lat };
+    state.held = state.held || {};
+    if (hitAP) state.held.ap = !!(state.shotM && state.shotM.ap); if (hitLat) state.held.lat = !!(state.shotM && state.shotM.lat);
+    state.reviews = { ap: hitAP ? false : state.reviews.ap, lat: hitLat ? false : state.reviews.lat, oblique: false };
     state.lastCheckFail = "";
     state.depth = false;
     renderBasics();
