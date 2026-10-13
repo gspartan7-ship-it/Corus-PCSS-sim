@@ -8,6 +8,11 @@ https://github.com/Kevin-Mattheus-Moerman/BodyParts3D). FMA IDs: 12519–12525, 
 Modifications: decimated (~3.6k triangles per vertebra), re-oriented to the sim frame, lordosis straightened and
 scaled, quantized to 16-bit and embedded. Per CC BY-SA, these modified meshes (src/parts/bp3d_data.js) are shared under CC BY-SA 2.1 JP.
 
+## Human figures
+Patient, surgeon and staff bodies: **MakeHuman base mesh and default rig + weights, CC0 1.0** (makehumancommunity/makehuman,
+`makehuman/data/3dobjs/base.obj`, `data/rigs/default.mhskel`, `default_weights.mhw`; LICENSE.ASSETS.md). Decimated to ~6k triangles,
+rig collapsed to 21 bones, gown/cap/mask/glove zones and gown skirt added (src/parts/mh_data.js, humans.js).
+
 ## Libraries
 three.js (MIT).
 
