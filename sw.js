@@ -1,5 +1,5 @@
-// build 3214f85: network-first for pages, versioned cache, old caches purged
-const C="pcss-sim-3214f85";
+// build 45908a3: network-first for pages, versioned cache, old caches purged
+const C="pcss-sim-45908a3";
 self.addEventListener("install",e=>{self.skipWaiting();});
 self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
 self.addEventListener("fetch",e=>{const q=e.request;if(q.method!=="GET"||new URL(q.url).origin!==location.origin)return;
