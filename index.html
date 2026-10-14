@@ -1703,6 +1703,12 @@ body.immersive[data-drawer="carm"] .carm-drawer,body.immersive[data-drawer="bed"
 .gradetab{width:100%;border-collapse:collapse;margin:6px 0}.gradetab td{padding:4px 6px;border-bottom:1px solid #ffffff14}.gradetab td+td{text-align:right;font-family:ui-monospace,monospace}li.tl-critical{color:#eb5757}li.tl-miss{color:#f2c94c}
 .msg.staff .who{color:#8fc7ff}
 
+/* v16f mic toggle */
+#btnPTT .micdot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff3b3b;margin-right:4px;vertical-align:middle;animation:micpulse 1.1s ease-in-out infinite}
+#btnPTT.live{background:#0d5a3a;border-color:#3fd18a}
+#btnPTT.needtap{border-color:#ffb35a}
+@keyframes micpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+
 </style></head><body data-tab="scene">
 <div class="app" id="app">
 <header class="nav"><div class="brand"><div class="symbol"><svg viewBox="0 0 44 44" width="36"><path d="M22 2L40 11V33L22 42L4 33V11Z" fill="#1c2b35" stroke="#d0a66e" stroke-width="1.6"/><path d="M22 9v26M13 22h18M16 15l6-5 6 5M16 29l6 5 6-5" fill="none" stroke="#e2c08b" stroke-width="2"/></svg></div><div><strong>CORUS <i>PCSS</i></strong><small>VIRTUAL OPERATING ROOM</small></div></div><div class="nav-center"><span class="livepulse"></span><span>TRAINING SIMULATION</span><span class="nav-slash">/</span><span id="navCase">AWAITING CASE</span></div><div class="nav-actions"><button id="btnLibrary" class="smallbtn" title="Add your imaging and instrument media">MEDIA LIBRARY</button><button id="btnHelp" class="smallbtn" title="Keyboard and game instructions">HELP</button><button id="btnAudio" class="smallbtn audio" title="Toggle simulated surgeon speech">◖ SOUND OFF</button><button id="btnFull" class="smallbtn" title="Fullscreen">⛶</button><button id="btnReset" class="smallbtn iconbtn" title="Start a new case">↻</button></div></header>
@@ -6655,7 +6661,7 @@ three/build/three.module.js:
       u.onstart = () => { V.tts = true; dlog("tts start"); }; u.volume = Audio5.vol; V.lastSpoken = text; V.ttsUntil = Date.now() + ms + 1500;
       const done = () => { if (!V.tts && V.ttsDone) return; V.ttsDone = true; Audio5.duck(false); V.tts = false; V.ttsEnd = Date.now(); dlog("tts end"); if (V.on && V.pausedForTts) { V.pausedForTts = false; setTimeout(recStart, 300); } };
       V.ttsDone = false; Audio5.duck(true); u.onend = u.onerror = done; setTimeout(() => { if (V.tts || !V.ttsDone) done(); }, ms + 2500); // iOS sometimes never fires onend
-      if (IOS && V.on && V.rec && !V.hold) { V.pausedForTts = true; try { V.rec.abort(); } catch (e) {} dlog("rec paused for tts"); } // iOS: mic and speech can't share the audio session
+      if (IOS && V.on && V.rec) { V.pausedForTts = true; try { V.rec.abort(); } catch (e) {} dlog("rec paused for tts"); } // iOS: mic and speech can't share the audio session
       window.speechSynthesis.speak(u);
     } catch (e) {}
   }
@@ -7940,7 +7946,7 @@ three/build/three.module.js:
   function renderDbg() {
     const p = document.getElementById("dbgPanel"); if (!p) return; const O = window.OR3D || {};
     const mem = performance.memory ? ` heap ${(performance.memory.usedJSHeapSize / 1048576) | 0}MB` : "";
-    p.querySelector("pre").textContent = `${(document.getElementById("buildTag") || {}).textContent || ""}  ${IOS ? "iOS" : ""}  SR:${SRC ? "yes" : "no"}  voice:${V.on ? "on" : "off"}${V.hold ? " hold" : ""}  tts:${V.tts ? "speaking" : "idle"}\nFPS ${O.fps || "?"}  ${O.mem ? O.mem() : ""}${mem}  glb ${O._glbStaff || 0}  lost ${O.lost || 0}\n${navigator.userAgent}\n---\n` + DLOG.slice().reverse().join("\n");
+    p.querySelector("pre").textContent = `${(document.getElementById("buildTag") || {}).textContent || ""}  ${IOS ? "iOS" : ""}  SR:${SRC ? "yes" : "no"}  voice:${V.on ? "on" : "off"}${V.needTap ? " needs-tap" : ""}  tts:${V.tts ? "speaking" : "idle"}\nFPS ${O.fps || "?"}  ${O.mem ? O.mem() : ""}${mem}  glb ${O._glbStaff || 0}  lost ${O.lost || 0}\n${navigator.userAgent}\n---\n` + DLOG.slice().reverse().join("\n");
   }
   function toggleDbg() {
     let p = document.getElementById("dbgPanel");
@@ -7972,7 +7978,9 @@ three/build/three.module.js:
     if (!b) { b = document.createElement("div"); b.id = "voiceBanner"; b.style.cssText = "position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top));z-index:9001;background:#7a2a12;color:#fff;border-radius:10px;padding:10px 36px 10px 12px;font:14px/1.35 system-ui,sans-serif"; b.innerHTML = '<span></span><button aria-label="Dismiss" style="position:absolute;right:6px;top:6px;background:none;border:0;color:#fff;font-size:18px">✕</button>'; b.querySelector("button").onclick = () => b.remove(); document.body.appendChild(b); }
     b.querySelector("span").textContent = msg;
   }
-  function micUi() { const b = $("btnPTT"); if (b) { b.classList.toggle("live", V.on); b.textContent = V.on ? (V.hold ? "● LISTENING · RELEASE TO SEND" : "● LISTENING · TAP TO STOP") : IOS ? "🎙 HOLD TO TALK" : "🎙 TAP TO TALK"; } const hf = $("btnHandsFree"); if (hf) { hf.classList.toggle("on", V.on); hf.textContent = V.on ? "HANDS-FREE: ON" : "HANDS-FREE: OFF"; } }
+  function micUi() { const b = $("btnPTT"); if (b) { b.classList.toggle("live", V.on); b.classList.toggle("needtap", !V.on && !!V.needTap); b.setAttribute("aria-pressed", V.on); b.innerHTML = V.on ? '<span class="micdot"></span> MIC ON' : V.needTap ? "🎙 MIC OFF · TAP TO RESUME" : "🎙 MIC OFF"; } const hf = $("btnHandsFree"); if (hf) { hf.classList.toggle("on", V.on); hf.textContent = V.on ? "MIC: ON" : "MIC: OFF"; } }
+  function needTap(why) { // iOS sometimes refuses to restart the mic without a fresh tap: say so, keep the button honest
+    dlog("needs tap: " + why); V.on = false; V.needTap = true; V.pausedForTts = false; micUi(); hud('🎙 Mic paused — tap <b>MIC OFF</b> to turn it back on', 6000); }
   function normSpeech(s) {
     let t = " " + String(s).toLowerCase().replace(/[.,!?;:"“”()]+/g, " ").replace(/[’']/g, "'") + " ";
     const R = [
@@ -8020,11 +8028,11 @@ three/build/three.module.js:
   function recStart() {
     if (!V.on) return;
     if (Date.now() - (V.startT || 0) < 400) return; // two restart paths (tts end + onend) can race; keep one session
-    if (IOS && !V.hold && V.tts && Date.now() < V.ttsUntil) { V.pausedForTts = true; dlog("rec waits for tts"); return; }
+    if (IOS && V.tts && Date.now() < V.ttsUntil) { V.pausedForTts = true; dlog("rec waits for tts"); return; }
     try {
       try { V.rec && V.rec.abort(); } catch (e) {}
       const r = new SRC(); V.rec = r; r.lang = "en-US"; r.interimResults = true; r.maxAlternatives = 3; r.continuous = !IOS; const t0 = Date.now(); V.startT = t0; let got = false;
-      r.onstart = () => dlog("rec start" + (IOS ? " (ios)" : ""));
+      r.onstart = () => { V.okOnce = true; V.needTap = false; dlog("rec start" + (IOS ? " (ios)" : "")); };
       r.onresult = (e) => {
         got = true; let tmp = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -8036,7 +8044,8 @@ three/build/three.module.js:
       };
       r.onerror = (e) => {
         dlog("rec error: " + e.error);
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") { V.on = false; micUi(); banner(IOS ? "Microphone or speech is blocked. In Settings allow the microphone for Safari, and turn on Siri & Dictation (Settings → Siri). Then tap TAP TO TALK again." : "Microphone is blocked. Allow the microphone for this site (lock icon in the address bar), then tap TAP TO TALK again."); hud("Mic blocked", 2500); }
+        if ((e.error === "not-allowed" || e.error === "service-not-allowed") && V.okOnce && IOS) { needTap("restart refused (" + e.error + ")"); return; }
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") { V.on = false; micUi(); banner(IOS ? "Microphone or speech is blocked. In Settings allow the microphone for Safari, and turn on Siri & Dictation (Settings → Siri). Then tap MIC OFF to turn it on again." : "Microphone is blocked. Allow the microphone for this site (lock icon in the address bar), then tap TAP TO TALK again."); hud("Mic blocked", 2500); }
         else if (e.error === "audio-capture") { V.on = false; micUi(); banner("No microphone found."); }
         else if (e.error === "network") { V.fails++; if (V.fails > 3) { V.on = false; micUi(); banner("Speech recognition needs an internet connection."); } }
       };
@@ -8044,10 +8053,10 @@ three/build/three.module.js:
         dlog(`rec end (${Date.now() - t0} ms${got ? "" : ", no result"})`);
         if (V.pend) commit(V.pend, "end");
         if (V.rec !== r) return;
-        if (V.on && !V.pausedForTts) { V.quick = Date.now() - t0 < 1200 && !got ? V.quick + 1 : 0; const wait = V.tts ? 700 : Math.min(3000, 250 * Math.pow(2, Math.min(4, V.quick))); setTimeout(recStart, wait); } else if (!V.on) micUi();
+        if (V.on && !V.pausedForTts) { V.quick = Date.now() - t0 < 1200 && !got ? V.quick + 1 : 0; if (IOS && V.quick >= 5) { V.quick = 0; return needTap("sessions ending immediately"); } const wait = V.tts ? 700 : Math.min(3000, 250 * Math.pow(2, Math.min(4, V.quick))); setTimeout(recStart, wait); } else if (!V.on) micUi();
       };
       r.start();
-    } catch (e) { dlog("rec start failed: " + e.message); V.on = false; micUi(); hud("Tap 🎙 TAP TO TALK to keep listening", 4000); }
+    } catch (e) { dlog("rec start failed: " + e.message); needTap("start threw"); }
   }
   function unlockAudio() {
     try { Audio5.start(); if (Audio5.ctx && Audio5.ctx.resume) Audio5.ctx.resume(); } catch (e) {}
@@ -8063,17 +8072,11 @@ three/build/three.module.js:
     nn.onclick = () => { unlockAudio(); w.remove(); };
     w.appendChild(b); w.appendChild(nn); document.body.appendChild(w);
   }
-  // push-and-hold fallback on the same mic button: hold > 0.35 s = talk while held
-  (function holdFallback() {
-    let t0 = 0, held = false, timer = 0;
-    document.addEventListener("pointerdown", (e) => { if (!e.target.closest || !e.target.closest("#btnPTT")) return; t0 = Date.now(); held = false; clearTimeout(timer); timer = setTimeout(() => { held = true; unlockAudio(); dlog("hold to talk"); if (window.speechSynthesis && speechSynthesis.speaking) speechSynthesis.cancel(); if (!V.on) { V.hold = true; voiceToggle(true); } }, 350); });
-    document.addEventListener("pointerup", (e) => { clearTimeout(timer); if (held && V.hold) { V.on = false; dlog("hold released"); setTimeout(() => { V.hold = false; try { V.rec && V.rec.stop(); } catch (x) {} if (V.pend) commit(V.pend, "release"); micUi(); }, 700); } });
-    document.addEventListener("click", (e) => { if (held && e.target.closest && e.target.closest("#btnPTT")) { e.stopImmediatePropagation(); e.preventDefault(); held = false; } }, true);
-  })();
   function voiceToggle(force) {
     unlockAudio();
     const want = force == null ? !V.on : force;
     dlog("voice " + (want ? "on" : "off"));
+    V.needTap = false;
     if (!want) { V.on = false; V.pausedForTts = false; try { V.rec && V.rec.abort(); } catch (e) {} micUi(); voiceHud().style.display = "none"; return; }
     const msg = voiceSupportMsg(); if (msg) { banner(msg); openDrawer("talk"); return; }
     V.on = true; micUi(); hud('<span style="color:#ff5a5a">●</span> Listening… speak naturally (“wig-wag toward me a touch”, “shoot lateral”)', 3500); recStart();
@@ -8244,4 +8247,4 @@ three/build/three.module.js:
 })();
 
 </script><script>if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});</script>
-<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v16e · 338dfaa</div><script>window.CORUS_BUILD="338dfaa";if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator){var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js?b=338dfaa").then(function(r){r.update();}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}</script></body></html>
+<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v16f · a8a031e</div><script>window.CORUS_BUILD="a8a031e";if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator){var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js?b=a8a031e").then(function(r){r.update();}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}</script></body></html>
