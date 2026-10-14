@@ -8019,10 +8019,11 @@ three/build/three.module.js:
   }
   function recStart() {
     if (!V.on) return;
+    if (Date.now() - (V.startT || 0) < 400) return; // two restart paths (tts end + onend) can race; keep one session
     if (IOS && !V.hold && V.tts && Date.now() < V.ttsUntil) { V.pausedForTts = true; dlog("rec waits for tts"); return; }
     try {
       try { V.rec && V.rec.abort(); } catch (e) {}
-      const r = new SRC(); V.rec = r; r.lang = "en-US"; r.interimResults = true; r.maxAlternatives = 3; r.continuous = !IOS; const t0 = Date.now(); let got = false;
+      const r = new SRC(); V.rec = r; r.lang = "en-US"; r.interimResults = true; r.maxAlternatives = 3; r.continuous = !IOS; const t0 = Date.now(); V.startT = t0; let got = false;
       r.onstart = () => dlog("rec start" + (IOS ? " (ios)" : ""));
       r.onresult = (e) => {
         got = true; let tmp = "";
@@ -8243,4 +8244,4 @@ three/build/three.module.js:
 })();
 
 </script><script>if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});</script>
-<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v16e · 45908a3</div><script>window.CORUS_BUILD="45908a3";if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator){var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js?b=45908a3").then(function(r){r.update();}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}</script></body></html>
+<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v16e · 338dfaa</div><script>window.CORUS_BUILD="338dfaa";if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator){var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js?b=338dfaa").then(function(r){r.update();}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}</script></body></html>
