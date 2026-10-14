@@ -22,4 +22,6 @@ three.js (MIT).
 
 Training simulation only. Not for clinical use.
 
-- Staff characters (people/*.glb): "Sam", "Maya", "Harper" by Innerscene (innerscene.com), CC0, built with MakeHuman/MPFB (CC0 assets); surgical cap and mask taken from Innerscene "Alex" (CC0). Retextured and optimized for this sim.
+## v18 additions
+- **Staff motion clips**: Quaternius "Universal Animation Library" (standard/free edition, CC0 1.0) via the glTF mirror github.com/J-Ponzo/gltf-universal-animation-library. Clips used: Idle_Loop, Idle_Talking_Loop, Interact, PickUp_Table (pruned, meshopt-compressed to `people/ual_or.glb`), retargeted at runtime by bone direction onto the Innerscene CC0 staff rigs.
+- **Baked floor ambient occlusion**: rendered offline with Blender 4.2 LTS (GPL; the output image is ours) from the sim's own geometry → `people/floor_ao.jpg`.
