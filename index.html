@@ -6796,24 +6796,34 @@ three/build/three.module.js:
     const sc = (v) => (/premium/i.test(v.name) ? 30 : /enhanced|natural|neural/i.test(v.name) ? 24 : 0) + (/en[-_]US/i.test(v.lang) ? 8 : 0) + (/samantha|ava|allison|susan|zoe|karen|tessa|female/i.test(v.name) ? 12 : 0);
     return en.sort((a, b) => sc(b) - sc(a))[0] || null; }
   try { if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", () => { if (!voicePick) voicePick = pickVoice(); if (!staffPick) staffPick = pickStaff(); }); } catch (e) {}
+  // v19.1: one line playing + at most one waiting (newest replaces); never stop the mic mid-phrase; single mic-resume owner
+  const traineeMid = () => !!(V.pend && Date.now() - (V.pendT || 0) < 1500);
   function speak(text, who) {
+    if (!state.voice || Audio5.muted || !("speechSynthesis" in window)) { const ms = Math.min(7000, 900 + text.length * 55); if (!who && has3D() && window.OR3D.surgeonSay) window.OR3D.surgeonSay(ms); subtitle(text, ms, who); return; }
+    if (V.speaking || traineeMid()) { V.nextLine = { text, who }; dlog("tts held (replace)"); if (!V.speaking) { clearTimeout(V.holdT); V.holdT = setTimeout(flushLine, 1600); } return; }
+    playLine(text, who);
+  }
+  function flushLine() { clearTimeout(V.holdT); if (V.speaking || !V.nextLine) return; if (traineeMid()) { V.holdT = setTimeout(flushLine, 400); return; } const n = V.nextLine; V.nextLine = null; playLine(n.text, n.who); }
+  function micResume() { clearTimeout(V.resT); V.resT = setTimeout(() => { if (V.on && !V.speaking && !V.nextLine) { V.pausedForTts = false; recStart(); } }, 400); }
+  function playLine(text, who) {
     const ms = Math.min(7000, 900 + text.length * 55);
     if (!who && has3D() && window.OR3D.surgeonSay) window.OR3D.surgeonSay(ms);
     subtitle(text, ms, who);
-    if (!state.voice || Audio5.muted || !("speechSynthesis" in window)) return;
     try {
-      if (window.speechSynthesis.pending) window.speechSynthesis.cancel(); // v19.0.1: restored v18.11 behavior (no pile-up on iOS)
+      V.speaking = true; clearTimeout(V.resT);
+      try { if (window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel(); } catch (e) {}
       voicePick = voicePick || pickVoice(); if (!staffPick && voicePick) staffPick = pickStaff();
       const u = new SpeechSynthesisUtterance(text); const vv = who ? staffPick || voicePick : voicePick;
       if (vv) u.voice = vv;
-      u.lang = "en-US"; const md = SG.mood; const prem = voicePick && /premium|enhanced|neural|natural|siri/i.test(voicePick.name), short = text.length < 14; // v18.9: natural pacing; small per-line drift, quicker when impatient, a touch slower on longer thoughts
+      u.lang = "en-US"; const md = SG.mood; const prem = voicePick && /premium|enhanced|neural|natural|siri/i.test(voicePick.name), short = text.length < 14;
       u.rate = who ? 1.04 : (prem ? 1.0 : 0.96) + (1 - md) * 0.07 + (short ? 0.04 : -0.01) + (Math.random() - 0.5) * 0.06; u.pitch = who ? 1.0 : (prem ? 1.0 : 0.95) + (md - 0.5) * 0.04 + (Math.random() - 0.5) * 0.05 + (/[?]$/.test(text) ? 0.03 : 0);
       u.onstart = () => { V.tts = true; dlog("tts start"); }; u.volume = Audio5.vol; V.lastSpoken = text; V.ttsUntil = Date.now() + ms + 1500;
-      const done = () => { if (!V.tts && V.ttsDone) return; V.ttsDone = true; Audio5.duck(false); V.tts = false; V.ttsEnd = Date.now(); dlog("tts end"); if (V.on && V.pausedForTts) { V.pausedForTts = false; setTimeout(recStart, 300); } };
-      V.ttsDone = false; Audio5.duck(true); u.onend = u.onerror = done; setTimeout(() => { if (V.tts || !V.ttsDone) done(); }, ms + 2500); // iOS sometimes never fires onend
+      let fin = false; const done = () => { if (fin) return; fin = true; clearTimeout(ft); Audio5.duck(false); V.tts = false; V.speaking = false; V.ttsEnd = Date.now(); dlog("tts end");
+        if (V.nextLine) { setTimeout(flushLine, 150); return; } micResume(); };
+      Audio5.duck(true); u.onend = u.onerror = done; const ft = setTimeout(done, ms + 2500); // iOS sometimes never fires onend
       if (IOS && V.on && V.rec) { V.pausedForTts = true; try { V.rec.abort(); } catch (e) {} dlog("rec paused for tts"); } // iOS: mic and speech can't share the audio session
       window.speechSynthesis.speak(u);
-    } catch (e) {}
+    } catch (e) { V.speaking = false; V.tts = false; }
   }
   let subT = 0;
   function subtitle(text, ms, who) { const el = $("subs"); if (!el) return; el.innerHTML = `<b>${who === "TECH" ? "JESS · RAD TECH" : who === "ANESTHESIA" ? "ANESTHESIA" : "DR. MORGAN"}</b> ${esc(text)}`; el.classList.add("on"); clearTimeout(subT); subT = setTimeout(() => el.classList.remove("on"), ms + 600); }
@@ -6824,7 +6834,7 @@ three/build/three.module.js:
   }
   /* ---------- v19: live model-generated surgeon dialogue (Pollinations, keyless, zero spend). Canned strings = fallback only. ---------- */
   const QS = new URLSearchParams(location.search);
-  var LIVE = { on: QS.get("live") === "1", url: "https://text.pollinations.ai/openai", model: "openai-fast", to: +(QS.get("liveTo") || 7000), cap: null, chain: Promise.resolve(), backlog: 0, recent: [], lastRep: "", stats: { ok: 0, fail: 0, ms: [] }, log: [], down: 0 };
+  var LIVE = { on: QS.get("live") !== "0", busy: false, fresh: +(QS.get("liveFresh") || 6000), url: "https://text.pollinations.ai/openai", model: "openai-fast", to: +(QS.get("liveTo") || 7000), cap: null, chain: Promise.resolve(), backlog: 0, recent: [], lastRep: "", stats: { ok: 0, fail: 0, ms: [] }, log: [], down: 0 };
   const LIVE_SYS = "You are Dr. Morgan, an experienced, dry-humored spine surgeon in the OR doing a CORUS PCSS percutaneous posterior cervical fusion with a device rep. Reply with ONE short natural spoken line, 3 to 14 words, casual OR talk with contractions. It must convey the given meaning and stay accurate to the facts. Never tell anyone how to fix the C-arm or images, never grade or praise performance mid-case, only PCSS steps (access chisel, trephine, guide tube, rasp, rotary, cage and screw, tamp); never mention DiViNE, dilators or a metric tube. Never invent facts or numbers you weren't given. You hold the instruments; the rep advises you and calls the images. If the rep asked a question, answer it directly. Don't start with Got it every time. No quotes, no emoji, no stage directions.";
   function liveFacts() {
     const f = []; try {
@@ -6842,6 +6852,7 @@ three/build/three.module.js:
     if (!s || s.length > 120 || s.split(" ").length > 18) return "";
     if (/divine|dilator|metric|great job|well done|good job|grade|score|tilt the|rotate the c|move the c-?arm|wig-?wag|as an ai|language model/i.test(s)) return "";
     if (LIVE.recent.includes(s.toLowerCase())) return "";
+    if (/\d[\d,]{2,}/.test(s)) return ""; // no invented big numbers
     return s;
   }
   async function liveAsk(user, to) {
@@ -6857,18 +6868,17 @@ three/build/three.module.js:
     } finally { clearTimeout(tm); }
   }
   // queue keeps surgeon lines in order and never overlapping; if the model is slow or offline, the canned line goes out
-  function liveSay(meanings, rep, canned) {
-    const fb = meanings.slice(), cn = canned || fb; LIVE.backlog++;
-    LIVE.chain = LIVE.chain.then(async () => {
-      let out = null; const skip = LIVE.backlog > 2;
-      if (!skip) { try { out = await liveAsk(`Facts: ${liveFacts()}.\n${rep ? `The rep just said: "${rep}".\n` : ""}What you need to say (meaning): ${fb.join(" ")}\nYour line:`, LIVE.to); } catch (e) { LIVE.stats.fail++; dlog && dlog("live fallback: " + e.message); } }
-      LIVE.backlog--;
-      if (out) { LIVE.recent.push(out.toLowerCase()); if (LIVE.recent.length > 30) LIVE.recent.shift(); LIVE.log.push({ rep, meaning: fb.join(" "), live: out }); addTalk("SURGEON", out, { live: true }); }
-      else cn.forEach((x) => addTalk("SURGEON", x, { live: true, canned: true }));
-    });
+  function liveQ(t) { return /^(what|why|how|where|when|which|who|is|are|can|could|do|does|should|would|will|any|tell me|you think|hey|so)\b/i.test(String(t).trim().toLowerCase()); }
+  function liveSay(meanings, rep, canned) { // v19.1: one call in flight; replies older than LIVE.fresh ms are dropped for the canned line
+    const cn = canned || meanings, say = (x, live) => addTalk("SURGEON", x, live ? { live: true } : { canned: true });
+    if (LIVE.busy || Date.now() < LIVE.down) { LIVE.stats.fail++; cn.forEach((x) => say(x)); return; }
+    LIVE.busy = true;
+    liveAsk(`Facts: ${liveFacts()}.\n${rep ? `The rep just said: "${rep}".\n` : ""}What you need to say (meaning): ${meanings.join(" ")}\nYour line:`, LIVE.fresh)
+      .then((out) => { LIVE.recent.push(out.toLowerCase()); if (LIVE.recent.length > 30) LIVE.recent.shift(); LIVE.log.push({ rep, meaning: meanings.join(" "), live: out }); say(out, true); })
+      .catch((e) => { LIVE.stats.fail++; dlog("live fallback: " + e.message); cn.forEach((x) => say(x)); })
+      .finally(() => { LIVE.busy = false; });
   }
   function addTalk(who, text, opt) {
-    if (who === "SURGEON" && LIVE.on && !(opt && opt.live)) { if (LIVE.cap) { LIVE.cap.push(text); return; } liveSay([text], ""); return; }
     if (who === "SURGEON" && text && (!opt || opt.canned) && !/^[A-Z]{2,}\.?$/.test(text)) text = humanize(text);
     state.dialogue.push({ who, text, time: state.elapsed }); if (who !== "REP") SG.lastTalk = Date.now();
     if (state.dialogue.length > 75) state.dialogue.shift();
@@ -6976,7 +6986,7 @@ three/build/three.module.js:
     } else if (/(trephine|chisel|guide tube|rasp|rotary|bone graft|tamp|implant|cage|multi.tool)/.test(lower)) {
       sgSay(SGL.tools);
     } else {
-      VC.fallback = true; sgSay(SGL.say_again);
+      VC.fallback = true; if (!(LIVE.on && liveQ(lower))) sgSay(SGL.say_again); // v19.1: free-form questions go to the live model instead
     }
     renderBasics();
   }
@@ -8316,7 +8326,7 @@ three/build/three.module.js:
   // v16e: commit a phrase once — from a final result, or from the interim text after ~800 ms of silence / at session end (iOS often never sets isFinal)
   const simWords = (a, b) => { const A = normSpeech(a).split(" "), B = new Set(normSpeech(b).split(" ")); return A.filter((w) => B.has(w)).length / Math.max(1, A.length); };
   function commit(txt, why) {
-    txt = String(txt || "").trim(); V.pend = ""; clearTimeout(V.silT); if (!txt) return;
+    txt = String(txt || "").trim(); V.pend = ""; clearTimeout(V.silT); if (V.nextLine && !V.speaking) setTimeout(flushLine, 50); if (!txt) return;
     const n = normSpeech(txt); if (n === V.lastCommit && Date.now() - V.lastCommitT < 3000) { dlog(`dup skipped (${why}): ${txt}`); return; }
     if ((V.tts || Date.now() - V.ttsEnd < 600) && V.lastSpoken && simWords(txt, V.lastSpoken) > 0.6) { dlog(`echo dropped (${why}): ${txt}`); return; } // only drop text that matches what the sim just said
     V.lastCommit = n; V.lastCommitT = Date.now(); V.fails = 0; dlog(`COMMIT (${why}): "${txt}" -> "${n}"`); runUtterance(txt, "voice");
@@ -8324,7 +8334,7 @@ three/build/three.module.js:
   function recStart() {
     if (!V.on) return;
     if (Date.now() - (V.startT || 0) < 400) return; // two restart paths (tts end + onend) can race; keep one session
-    if (IOS && V.tts && Date.now() < V.ttsUntil) { V.pausedForTts = true; dlog("rec waits for tts"); return; }
+    if (V.speaking || V.nextLine) { V.pausedForTts = true; dlog("rec waits for tts"); return; } // v19.1: micResume() owns the restart after speech
     try {
       try { V.rec && V.rec.abort(); } catch (e) {}
       const r = new SRC(); V.rec = r; r.lang = "en-US"; r.interimResults = true; r.maxAlternatives = 3; r.continuous = !IOS; const t0 = Date.now(); V.startT = t0; let got = false;
@@ -8336,7 +8346,7 @@ three/build/three.module.js:
           dlog(`result ${res.isFinal ? "FINAL" : "interim"}: "${tx}"`);
           if (res.isFinal) commit(tx, "final"); else tmp += tx;
         }
-        if (tmp) { V.pend = tmp; hud(`<span style="color:#ff5a5a">●</span> <b style="font-size:18px">“${esc(tmp)}”</b>`); clearTimeout(V.silT); V.silT = setTimeout(() => commit(V.pend, "silence"), 800); }
+        if (tmp) { V.pend = tmp; V.pendT = Date.now(); hud(`<span style="color:#ff5a5a">●</span> <b style="font-size:18px">“${esc(tmp)}”</b>`); clearTimeout(V.silT); V.silT = setTimeout(() => commit(V.pend, "silence"), 800); }
       };
       r.onerror = (e) => {
         dlog("rec error: " + e.error);
@@ -8425,14 +8435,14 @@ three/build/three.module.js:
     if (/drawer/.test(document.body.dataset.drawer || "") || document.body.dataset.drawer) renderCtlDrawers();
   }
   function voiceCommand(raw) { // v19: every rep utterance gets a live surgeon reply built from what was said + sim state
-    if (!LIVE.on || LIVE.cap) return voiceCommandCore(raw);
-    LIVE.cap = []; try { voiceCommandCore(raw); } finally { const c = LIVE.cap; LIVE.cap = null; if (VC.fallback && /^(what|why|how|where|when|which|who|is|are|can|could|do|does|should|would|will|any)\b/i.test(String(raw).trim())) { liveSay(["Answer the rep's question briefly and only from the facts; if the facts don't cover it, say you're not sure, or that it's a debrief question. Patient status questions go to anesthesia; never claim vitals yourself."], raw, [sgPick(["Good question. Ask me after the case.", "Not sure. Let's talk about it after.", "Hold that thought till the debrief."])]); return; } if (c.length) liveSay(c, raw); }
+    voiceCommandCore(raw); // v19.1: recognized commands answer instantly with canned lines
+    { const c = []; if (LIVE.on && VC.fallback && liveQ(raw)) { VC.fallback = false; VC.act = "Asked Dr. Morgan"; liveSay(["Answer the rep's question briefly and only from the facts; if the facts don't cover it, say you're not sure, or that it's a debrief question. Patient status questions go to anesthesia; never claim vitals yourself."], raw, [sgPick(["Good question. Ask me after the case.", "Not sure. Let's talk about it after.", "Hold that thought till the debrief."])]); return; } }
   }
   function voiceCommandCore(raw) {
     const t = raw.toLowerCase().replace(/[^a-z0-9\- ]/g, " ");
     const shootWord = /\b(shoot|shooting|shot|fire|take|taking|give me|image)\b/.test(t);
     if (/^(what|which|where|are you|you happy|how|do you|can i|need|anything|thank|sorry|hey|hi|good morning)\b/.test(t.trim()) && !state.ask) { const n0 = state.dialogue.length; addTalk("REP", raw); if (surgeonIntent(t)) { VC.act = ""; renderBasics(); return; } state.dialogue.splice(n0, 1); }
-    if (markLive()) { const n = state.dialogue.length; addTalk("REP", raw); if (markVoice(t)) return; state.dialogue.splice(n, 1); }
+    if (markLive() && !/^(why|what|how|should|do you|does|is it|tell me)\b/.test(t.trim())) { const n = state.dialogue.length; addTalk("REP", raw); if (markVoice(t)) return; state.dialogue.splice(n, 1); }
     // v18.6 voice-first: debrief, final review, en face / zero the AP, depth acknowledgement
     if (/\b(debrief|show (me )?(the )?(report|grade|score|results))\b/.test(t) && state.started) { addTalk("REP", raw); return openDebrief(!!state.done); }
     if (state.started && state.final && !state.done) {
@@ -8578,4 +8588,4 @@ three/build/three.module.js:
 })();
 
 </script><script>if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});</script>
-<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v19.0.1 · f79ee93</div><script>window.CORUS_BUILD="f79ee93";(function(){try{if(!/^https?:$/.test(location.protocol)||!("serviceWorker" in navigator))return;var B=window.CORUS_BUILD,now=Date.now(),LS=window.localStorage,K="pcssReloads",L=[];try{L=JSON.parse(LS.getItem(K)||"[]").filter(function(t){return now-t<30000;});}catch(e){}if(L.length>2){try{LS.setItem("pcssSafe",String(now));LS.removeItem(K);}catch(e){}navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});if(window.caches)caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});return;}var safe=+(LS.getItem("pcssSafe")||0);if(now-safe<600000){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});return;}var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;var g="pcssRL_"+B;try{if(LS.getItem(g))return;LS.setItem(g,"1");L.push(Date.now());LS.setItem(K,JSON.stringify(L));}catch(e){return;}window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}catch(e){}})();</script></body></html>
+<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v19.1 · 7582e55</div><script>window.CORUS_BUILD="7582e55";(function(){try{if(!/^https?:$/.test(location.protocol)||!("serviceWorker" in navigator))return;var B=window.CORUS_BUILD,now=Date.now(),LS=window.localStorage,K="pcssReloads",L=[];try{L=JSON.parse(LS.getItem(K)||"[]").filter(function(t){return now-t<30000;});}catch(e){}if(L.length>2){try{LS.setItem("pcssSafe",String(now));LS.removeItem(K);}catch(e){}navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});if(window.caches)caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});return;}var safe=+(LS.getItem("pcssSafe")||0);if(now-safe<600000){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});return;}var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;var g="pcssRL_"+B;try{if(LS.getItem(g))return;LS.setItem(g,"1");L.push(Date.now());LS.setItem(K,JSON.stringify(L));}catch(e){return;}window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}catch(e){}})();</script></body></html>
