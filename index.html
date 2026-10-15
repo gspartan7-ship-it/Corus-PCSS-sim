@@ -6791,19 +6791,23 @@ three/build/three.module.js:
     if (ranked.length) dlog && dlog("voice: " + ranked.slice(0, 3).map((x) => x[1].name + "(" + x[0] + ")").join(", "));
     return ranked.length ? ranked[0][1] : null;
   }
-  try { if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", () => { voicePick = pickVoice(); }); } catch (e) {}
+  let staffPick = null; // v19: fixed, clearly distinct voice for Jess / anesthesia (picked once); never the default voice at a raised pitch
+  function pickStaff() { const vs = ("speechSynthesis" in window && speechSynthesis.getVoices()) || []; const en = vs.filter((v) => /^en/i.test(v.lang) && !NOVELTY.test(v.name) && (!voicePick || v.name !== voicePick.name));
+    const sc = (v) => (/premium/i.test(v.name) ? 30 : /enhanced|natural|neural/i.test(v.name) ? 24 : 0) + (/en[-_]US/i.test(v.lang) ? 8 : 0) + (/samantha|ava|allison|susan|zoe|karen|tessa|female/i.test(v.name) ? 12 : 0);
+    return en.sort((a, b) => sc(b) - sc(a))[0] || null; }
+  try { if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", () => { if (!voicePick) voicePick = pickVoice(); if (!staffPick) staffPick = pickStaff(); }); } catch (e) {}
   function speak(text, who) {
     const ms = Math.min(7000, 900 + text.length * 55);
     if (!who && has3D() && window.OR3D.surgeonSay) window.OR3D.surgeonSay(ms);
     subtitle(text, ms, who);
     if (!state.voice || Audio5.muted || !("speechSynthesis" in window)) return;
     try {
-      if (window.speechSynthesis.pending) window.speechSynthesis.cancel();
-      voicePick = voicePick || pickVoice();
-      const u = new SpeechSynthesisUtterance(text);
-      if (voicePick) u.voice = voicePick;
+      // v19: no cancel; utterances queue in order so lines never overlap or get cut
+      voicePick = voicePick || pickVoice(); if (!staffPick && voicePick) staffPick = pickStaff();
+      const u = new SpeechSynthesisUtterance(text); const vv = who ? staffPick || voicePick : voicePick;
+      if (vv) u.voice = vv;
       u.lang = "en-US"; const md = SG.mood; const prem = voicePick && /premium|enhanced|neural|natural|siri/i.test(voicePick.name), short = text.length < 14; // v18.9: natural pacing; small per-line drift, quicker when impatient, a touch slower on longer thoughts
-      u.rate = who ? 1.03 + Math.random() * 0.08 : (prem ? 1.0 : 0.96) + (1 - md) * 0.07 + (short ? 0.04 : -0.01) + (Math.random() - 0.5) * 0.06; u.pitch = who ? 1.08 + Math.random() * 0.08 : (prem ? 1.0 : 0.95) + (md - 0.5) * 0.04 + (Math.random() - 0.5) * 0.05 + (/[?]$/.test(text) ? 0.03 : 0);
+      u.rate = who ? 1.04 : (prem ? 1.0 : 0.96) + (1 - md) * 0.07 + (short ? 0.04 : -0.01) + (Math.random() - 0.5) * 0.06; u.pitch = who ? 1.0 : (prem ? 1.0 : 0.95) + (md - 0.5) * 0.04 + (Math.random() - 0.5) * 0.05 + (/[?]$/.test(text) ? 0.03 : 0);
       u.onstart = () => { V.tts = true; dlog("tts start"); }; u.volume = Audio5.vol; V.lastSpoken = text; V.ttsUntil = Date.now() + ms + 1500;
       const done = () => { if (!V.tts && V.ttsDone) return; V.ttsDone = true; Audio5.duck(false); V.tts = false; V.ttsEnd = Date.now(); dlog("tts end"); if (V.on && V.pausedForTts) { V.pausedForTts = false; setTimeout(recStart, 300); } };
       V.ttsDone = false; Audio5.duck(true); u.onend = u.onerror = done; setTimeout(() => { if (V.tts || !V.ttsDone) done(); }, ms + 2500); // iOS sometimes never fires onend
@@ -6818,8 +6822,54 @@ three/build/three.module.js:
     if (t.length > 18 && !/^(okay|alright|so|hmm|mm|yeah|right|good|nope|no)\b/i.test(t) && Math.random() < 0.18) { const f = sgPick(["Okay, ", "Alright, ", "So, ", "Mm. ", "Right. ", "Yeah, "]), keep = /^(I\b|I'|C\d|T1|AP|CAVUX|ALLY|Jess|Dr)/.test(t) || f.endsWith(". "); t = f + (keep ? t : t.charAt(0).toLowerCase() + t.slice(1)); }
     return t;
   }
-  function addTalk(who, text) {
-    if (who === "SURGEON" && text && !/^[A-Z]{2,}\.?$/.test(text)) text = humanize(text);
+  /* ---------- v19: live model-generated surgeon dialogue (Pollinations, keyless, zero spend). Canned strings = fallback only. ---------- */
+  const QS = new URLSearchParams(location.search);
+  var LIVE = { on: QS.get("live") !== "0", url: "https://text.pollinations.ai/openai", model: "openai-fast", to: +(QS.get("liveTo") || 7000), cap: null, chain: Promise.resolve(), backlog: 0, recent: [], lastRep: "", stats: { ok: 0, fail: 0, ms: [] }, log: [], down: 0 };
+  const LIVE_SYS = "You are Dr. Morgan, an experienced, dry-humored spine surgeon in the OR doing a CORUS PCSS percutaneous posterior cervical fusion with a device rep. Reply with ONE short natural spoken line, 3 to 14 words, casual OR talk with contractions. It must convey the given meaning and stay accurate to the facts. Never tell anyone how to fix the C-arm or images, never grade or praise performance mid-case, only PCSS steps (access chisel, trephine, guide tube, rasp, rotary, cage and screw, tamp); never mention DiViNE, dilators or a metric tube. Never invent facts or numbers you weren't given. You hold the instruments; the rep advises you and calls the images. If the rep asked a question, answer it directly. Don't start with Got it every time. No quotes, no emoji, no stage directions.";
+  function liveFacts() {
+    const f = []; try {
+      if (state.final) f.push("phase=final imaging review"); else { const st = step(); f.push("step=" + st.title); if (st.tool) f.push("instrument=" + toolName(st.tool)); }
+      f.push("level=" + level(), "side=" + side().toLowerCase(), "difficulty=" + cfg().difficulty.toLowerCase(), "mood=" + sgMoodTag(), "elapsed_min=" + Math.round((state.elapsed || 0) / 60));
+      if (state.ml) f.push("AP trajectory: tip " + Math.abs(state.ml) + " mm too " + (state.ml > 0 ? "lateral" : "medial")); else if (state.ml === 0) f.push("AP trajectory: on target");
+      if (state.he) f.push("lateral trajectory: tip " + Math.abs(state.he) + " deg too " + (state.he > 0 ? "high" : "low")); 
+      if (state.seatD != null && state.action) f.push("depth: " + (Math.abs(state.seatD - 1) < 0.035 ? "on the line" : state.seatD < 1 ? "short of the line" : "past the line"));
+      if (state.fixN) f.push("trajectory corrections this side=" + state.fixN);
+      if (state.marks) f.push("skin marking: " + (state.marks.done ? "complete" : (state.marks.cur ? "placing the " + MARK_IT[state.marks.cur] + " line" : "in progress")));
+    } catch (e) {} return f.join("; ");
+  }
+  function liveClean(s) {
+    s = String(s || "").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").replace(/[“”"*_`]/g, "").replace(/^\s*(dr\.? morgan|surgeon)\s*:\s*/i, "").replace(/\([^)]*\)/g, "").split(/\n/)[0].replace(/\s+/g, " ").trim();
+    if (!s || s.length > 120 || s.split(" ").length > 18) return "";
+    if (/divine|dilator|metric|great job|well done|good job|grade|score|tilt the|rotate the c|move the c-?arm|wig-?wag|as an ai|language model/i.test(s)) return "";
+    if (LIVE.recent.includes(s.toLowerCase())) return "";
+    return s;
+  }
+  async function liveAsk(user, to) {
+    if (!LIVE.on || Date.now() < LIVE.down) throw new Error("off");
+    const ac = new AbortController(), t0 = performance.now(), tm = setTimeout(() => ac.abort(), to);
+    try {
+      const r = await fetch(LIVE.url, { method: "POST", headers: { "Content-Type": "application/json" }, signal: ac.signal, body: JSON.stringify({ model: LIVE.model, reasoning_effort: "low", max_tokens: 320, seed: (Math.random() * 1e9) | 0, messages: [{ role: "system", content: LIVE_SYS }, { role: "user", content: user }] }) });
+      if (r.status === 429) LIVE.down = Date.now() + 15000;
+      if (!r.ok) throw new Error("http " + r.status);
+      const j = await r.json(), s = liveClean(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content);
+      if (!s) throw new Error("rejected");
+      const ms = Math.round(performance.now() - t0); LIVE.stats.ok++; LIVE.stats.ms.push(ms); return s;
+    } finally { clearTimeout(tm); }
+  }
+  // queue keeps surgeon lines in order and never overlapping; if the model is slow or offline, the canned line goes out
+  function liveSay(meanings, rep, canned) {
+    const fb = meanings.slice(), cn = canned || fb; LIVE.backlog++;
+    LIVE.chain = LIVE.chain.then(async () => {
+      let out = null; const skip = LIVE.backlog > 2;
+      if (!skip) { try { out = await liveAsk(`Facts: ${liveFacts()}.\n${rep ? `The rep just said: "${rep}".\n` : ""}What you need to say (meaning): ${fb.join(" ")}\nYour line:`, LIVE.to); } catch (e) { LIVE.stats.fail++; dlog && dlog("live fallback: " + e.message); } }
+      LIVE.backlog--;
+      if (out) { LIVE.recent.push(out.toLowerCase()); if (LIVE.recent.length > 30) LIVE.recent.shift(); LIVE.log.push({ rep, meaning: fb.join(" "), live: out }); addTalk("SURGEON", out, { live: true }); }
+      else cn.forEach((x) => addTalk("SURGEON", x, { live: true, canned: true }));
+    });
+  }
+  function addTalk(who, text, opt) {
+    if (who === "SURGEON" && LIVE.on && !(opt && opt.live)) { if (LIVE.cap) { LIVE.cap.push(text); return; } liveSay([text], ""); return; }
+    if (who === "SURGEON" && text && (!opt || opt.canned) && !/^[A-Z]{2,}\.?$/.test(text)) text = humanize(text);
     state.dialogue.push({ who, text, time: state.elapsed }); if (who !== "REP") SG.lastTalk = Date.now();
     if (state.dialogue.length > 75) state.dialogue.shift();
     $("dialogue").innerHTML = state.dialogue
@@ -8168,7 +8218,7 @@ three/build/three.module.js:
     if (/\bfirst (case|time)\b|\bhow long have you\b|\bhow many (of these|cases)\b/.test(lower)) return addTalk("SURGEON", sgPick(["I've done a few hundred of these. Still check every picture.", "Long enough to want good images every time.", "Plenty. They're never the same twice."])), true;
     if (/\b(is|was) that (ok|okay|good|alright)\b|\bdid i do (that|it) right\b/.test(lower)) return addTalk("SURGEON", sgPick(["We'll talk at the end.", "Keep going. We'll debrief after.", "Save it for the debrief."])), true;
     if (/\bwhere'?s (the )?entry\b|\bwhere do (we|you) go in\b/.test(lower)) return addTalk("SURGEON", state.marks && state.marks.done ? sgPick(["Right on the purple line.", "Where we marked, two levels down."]) : sgPick(["We'll mark it first.", "Let's get the skin marked before we talk entry."])), true;
-    if (/\b(vitals|how'?s the patient|patient ok|pressure)\b/.test(lower)) { addTalk("ANESTHESIA", sgPick(["Vitals are stable.", "She's fine. Pressure's good.", "All good up here."])); return true; }
+    if (/\b(vitals|how'?s the patient|patient (ok|okay|stable)|pressure)\b/.test(lower)) { addTalk("ANESTHESIA", sgPick(["Vitals are stable.", "She's fine. Pressure's good.", "All good up here."])); return true; }
     if (/^\s*(ok|okay|yes|yep|yeah|sure|copy|got it|sounds good|will do|roger)\b/.test(lower)) return sgSay(SGL.yes), true;
     return false;
   }
@@ -8374,7 +8424,11 @@ three/build/three.module.js:
     if (typeof refreshReadouts === "function") refreshReadouts();
     if (/drawer/.test(document.body.dataset.drawer || "") || document.body.dataset.drawer) renderCtlDrawers();
   }
-  function voiceCommand(raw) {
+  function voiceCommand(raw) { // v19: every rep utterance gets a live surgeon reply built from what was said + sim state
+    if (!LIVE.on || LIVE.cap) return voiceCommandCore(raw);
+    LIVE.cap = []; try { voiceCommandCore(raw); } finally { const c = LIVE.cap; LIVE.cap = null; if (VC.fallback && /^(what|why|how|where|when|which|who|is|are|can|could|do|does|should|would|will|any)\b/i.test(String(raw).trim())) { liveSay(["Answer the rep's question briefly and only from the facts; if the facts don't cover it, say you're not sure, or that it's a debrief question. Patient status questions go to anesthesia; never claim vitals yourself."], raw, [sgPick(["Good question. Ask me after the case.", "Not sure. Let's talk about it after.", "Hold that thought till the debrief."])]); return; } if (c.length) liveSay(c, raw); }
+  }
+  function voiceCommandCore(raw) {
     const t = raw.toLowerCase().replace(/[^a-z0-9\- ]/g, " ");
     const shootWord = /\b(shoot|shooting|shot|fire|take|taking|give me|image)\b/.test(t);
     if (/^(what|which|where|are you|you happy|how|do you|can i|need|anything|thank|sorry|hey|hi|good morning)\b/.test(t.trim()) && !state.ask) { const n0 = state.dialogue.length; addTalk("REP", raw); if (surgeonIntent(t)) { VC.act = ""; renderBasics(); return; } state.dialogue.splice(n0, 1); }
@@ -8524,4 +8578,4 @@ three/build/three.module.js:
 })();
 
 </script><script>if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});</script>
-<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v18.11 · e19fcef</div><script>window.CORUS_BUILD="e19fcef";(function(){try{if(!/^https?:$/.test(location.protocol)||!("serviceWorker" in navigator))return;var B=window.CORUS_BUILD,now=Date.now(),LS=window.localStorage,K="pcssReloads",L=[];try{L=JSON.parse(LS.getItem(K)||"[]").filter(function(t){return now-t<30000;});}catch(e){}if(L.length>2){try{LS.setItem("pcssSafe",String(now));LS.removeItem(K);}catch(e){}navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});if(window.caches)caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});return;}var safe=+(LS.getItem("pcssSafe")||0);if(now-safe<600000){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});return;}var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;var g="pcssRL_"+B;try{if(LS.getItem(g))return;LS.setItem(g,"1");L.push(Date.now());LS.setItem(K,JSON.stringify(L));}catch(e){return;}window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}catch(e){}})();</script></body></html>
+<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v19 · 994d520</div><script>window.CORUS_BUILD="994d520";(function(){try{if(!/^https?:$/.test(location.protocol)||!("serviceWorker" in navigator))return;var B=window.CORUS_BUILD,now=Date.now(),LS=window.localStorage,K="pcssReloads",L=[];try{L=JSON.parse(LS.getItem(K)||"[]").filter(function(t){return now-t<30000;});}catch(e){}if(L.length>2){try{LS.setItem("pcssSafe",String(now));LS.removeItem(K);}catch(e){}navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});if(window.caches)caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});return;}var safe=+(LS.getItem("pcssSafe")||0);if(now-safe<600000){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});return;}var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;var g="pcssRL_"+B;try{if(LS.getItem(g))return;LS.setItem(g,"1");L.push(Date.now());LS.setItem(K,JSON.stringify(L));}catch(e){return;}window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}catch(e){}})();</script></body></html>
