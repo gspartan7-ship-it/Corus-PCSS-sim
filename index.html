@@ -6622,7 +6622,7 @@ three/build/three.module.js:
     const ack = dir > 0 ? (push ? ["Pushing.", "Okay, advancing.", "Pushing it down.", `Little more pressure${n > 1 ? ", a bit further" : ""}.`, "Advancing through the tube."]
         : [`Tapping${word}.`, "Okay, mallet.", n > 1 ? `${n === 2 ? "Couple" : "Few"} more taps.` : "One more tap.", "Tapping it in.", "Mallet."])
       : ["Backing it out.", "Pulling back a touch.", "Okay, coming back.", "Easing it back."];
-    addTalk("SURGEON", pickOne(ack));
+    { const tn = toolName(tool || "chisel").toLowerCase(), extra = dir > 0 ? [`Little more on the ${tn}.`, `${tn.charAt(0).toUpperCase() + tn.slice(1)}'s going down.`, "Feels solid. Going a bit more.", state.depthN > 2 ? "Okay, still going. Tell me when it's on the line." : "Sure."] : [`Bringing the ${tn} back.`, "Easy. Coming back a hair.", state.depthN > 2 ? "Back again. Watch it for me." : "Okay, backing off."]; state.depthN = (state.depthN || 0) + 1; addTalk("SURGEON", pickOne(ack.concat(extra))); }
     state.reviews = { ap: state.reviews.ap, lat: false, oblique: false }; state.depth = false; // depth changed: the lateral must be re-shot
     if (has3D()) window.OR3D.update(sceneSnapshot());
     renderBasics();
@@ -7406,7 +7406,7 @@ three/build/three.module.js:
     if (id === "guide" && state.action && state.reviews.ap && state.reviews.lat) { addTalk("SURGEON", "The tube's already malleted in. Too late to steer it."); return; }
     state.ml = Math.max(-6, Math.min(6, (state.ml || 0) + dir)); // mm, + = lateral, − = medial
     state.fixN = (state.fixN || 0) + 1;
-    addTalk("SURGEON", state.fixN === 4 ? `${dir < 0 ? "Medial" : "Lateral"} again. That's four tweaks on this side, we're getting there.` : sgPick(dir < 0 ? ["Medializing a millimeter.", "Coming medial a hair.", "Okay, medial. Like that?", "Bringing it in a millimeter.", "Medial, there."] : ["Lateralizing a millimeter.", "Coming out lateral a touch.", "Okay, lateral a hair.", "Going lateral. Better?", "Out a millimeter."]));
+    addTalk("SURGEON", sgCorr(dir < 0 ? "medial" : "lateral"));
     logEvent(`Trajectory command → ${dir < 0 ? "medialize" : "lateralize"}`);
     state.reviews = { ap: false, lat: false, oblique: false }; state.held = { ap: !!(state.shotM && state.shotM.ap), lat: !!(state.shotM && state.shotM.lat) };
     if (approachLive()) { state.pre = { ap: false, lat: false }; state.goAhead = false; }
@@ -7427,7 +7427,7 @@ three/build/three.module.js:
     if (id === "guide" && state.action && state.reviews.ap && state.reviews.lat) { addTalk("SURGEON", "The tube's already malleted in. Too late to steer it."); return; }
     state.he = Math.max(-10, Math.min(10, (state.he || 0) + 2 * dir));
     state.fixN = (state.fixN || 0) + 1;
-    addTalk("SURGEON", sgPick(dir > 0 ? ["Dropping my hand a little.", "Hand down a touch.", "Okay, lowering my hand.", "Dropping the hand. Tip comes up.", "Down a bit. Like that?"] : ["Bringing my hand up a little.", "Hand up a touch.", "Raising my hand.", "Okay, up. Tip drops.", "Up a hair. Better?"]));
+    addTalk("SURGEON", sgCorr(dir > 0 ? "drop" : "raise"));
     logEvent(`Trajectory command → ${dir > 0 ? "drop hand (tip up)" : "raise hand (tip down)"}`);
     state.reviews = { ap: false, lat: false, oblique: false }; state.held = { ap: !!(state.shotM && state.shotM.ap), lat: !!(state.shotM && state.shotM.lat) };
     if (approachLive()) { state.pre = { ap: false, lat: false }; state.goAhead = false; }
@@ -7639,7 +7639,7 @@ three/build/three.module.js:
         state.action = false;
       }
     }
-    if (state.step === 0) { state.ml = null; state.he = 0; state.approach = false; state.fixN = 0; } state.ask = null; state.stationNag = false;
+    if (state.step === 0) { state.ml = null; state.he = 0; state.approach = false; state.fixN = 0; } state.depthN = 0; state.ask = null; state.stationNag = false;
     // v14.1: never wipe the rep's corrections. New level = 1-2 fresh faults on top of the current setup; other side of the same level = same setup
     if (state.step === 0 && !state.final && state.side === 0) {
       state.adjust = state.adjust ? pickFaults([1, 2, 2][state.caseIndex] ?? 2, state.adjust) : { ...initialAdjust() };
@@ -8104,6 +8104,23 @@ three/build/three.module.js:
   function sgFill(s) { let lv = "", sd = ""; try { lv = level(); } catch (e) {} try { sd = side().toLowerCase(); } catch (e) {} const mins = Math.max(1, Math.round((state.elapsed || 0) / 60)); return s.replace(/\{level\}/g, lv).replace(/\{side\}/g, sd).replace(/\{shots\}/g, String(state.shots || 0)).replace(/\{mins\}/g, String(mins)); }
   function sgLine(pool) { const arr = Array.isArray(pool) ? pool : pool[sgMoodTag()] || pool.neutral; return sgFill(sgPick(arr)); }
   function sgSay(pool) { addTalk("SURGEON", sgLine(pool)); }
+  // v18.9: context-aware correction acks: instrument, side, level, how many tweaks on this side, mood, difficulty
+  function sgCorr(kind) {
+    let tn = "chisel"; try { tn = toolName(step().tool || "chisel").toLowerCase(); } catch (e) {}
+    const n = state.fixN || 1, hard = (() => { try { return cfg().difficulty === "HARD"; } catch (e) { return false; } })(), sd = (() => { try { return side().toLowerCase(); } catch (e) { return ""; } })();
+    const P = {
+      medial: ["Medializing a millimeter.", "Coming medial a hair.", "Okay, medial. Like that?", "Bringing it in a millimeter.", "Medial, there.", `Walking the ${tn} in a touch.`, "In a bit. Careful, that's the canal side.", "Okay, coming toward midline.", "A hair medial. Not more than that."],
+      lateral: ["Lateralizing a millimeter.", "Coming out lateral a touch.", "Okay, lateral a hair.", "Going lateral. Better?", "Out a millimeter.", `Walking the ${tn} out a bit.`, "Out a touch. I don't want to fall off the mass.", `Lateral on the ${sd} side. Okay.`, "Little lateral. Got it."],
+      drop: ["Dropping my hand a little.", "Hand down a touch.", "Okay, lowering my hand.", "Dropping the hand. Tip comes up.", "Down a bit. Like that?", `Hand down, so the ${tn} tip comes up.`, "Lowering. Tell me if I overshoot.", "Okay, flatter."],
+      raise: ["Bringing my hand up a little.", "Hand up a touch.", "Raising my hand.", "Okay, up. Tip drops.", "Up a hair. Better?", `Hand up. Tip of the ${tn} goes down.`, "Steeper, okay.", "Up a bit. Watch the lateral for me."],
+    };
+    let line = sgPick(P[kind]);
+    if (n === 3) line += sgPick([" That's a few tweaks now.", " We're dialing it in.", ""]);
+    else if (n === 5) line = sgPick([`Okay, that's five adjustments on this side. ${hard ? "Tough neck." : "Let's get it."}`, `${line} I'm starting to feel like a joystick.`, `${line} Make sure that's the last one.`]);
+    else if (n > 6 && SG.mood < 0.45) line = sgPick([`${line} We're going back and forth.`, "Again? Okay.", `${line} Tell me when it's right, not close.`]);
+    else if (n > 6) line += sgPick([" Still with you.", "", " One more?"]);
+    return line;
+  }
   var SGL = {
     bad: { warm: ["Hmm. Not quite. Let's get another.", "Close, but I can't use that one.", "Not there yet. Again when you're ready."], neutral: ["That's not usable. Shoot it again.", "I can't work off that. Again.", "No. Take another one.", "That won't do.", "Nope. Another one."], terse: ["Come on. Again.", "Still no good.", "We're cooking this patient. Get it right.", "That's worse, if anything.", "Again. Please."] },
     good: { warm: ["Beautiful.", "That's a nice picture.", "Now we're talking.", "Love it."], neutral: ["Good.", "That works.", "Okay, I can use that.", "Better."], terse: ["Finally.", "Fine.", "Okay. Took a while."] },
@@ -8507,4 +8524,4 @@ three/build/three.module.js:
 })();
 
 </script><script>if(/^https?:$/.test(location.protocol)&&"serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});</script>
-<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v18.8 · 89bcf46</div><script>window.CORUS_BUILD="89bcf46";(function(){try{if(!/^https?:$/.test(location.protocol)||!("serviceWorker" in navigator))return;var B=window.CORUS_BUILD,now=Date.now(),LS=window.localStorage,K="pcssReloads",L=[];try{L=JSON.parse(LS.getItem(K)||"[]").filter(function(t){return now-t<30000;});}catch(e){}if(L.length>2){try{LS.setItem("pcssSafe",String(now));LS.removeItem(K);}catch(e){}navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});if(window.caches)caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});return;}var safe=+(LS.getItem("pcssSafe")||0);if(now-safe<600000){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});return;}var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;var g="pcssRL_"+B;try{if(LS.getItem(g))return;LS.setItem(g,"1");L.push(Date.now());LS.setItem(K,JSON.stringify(L));}catch(e){return;}window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}catch(e){}})();</script></body></html>
+<div id="buildTag" style="position:fixed;right:6px;bottom:4px;z-index:2147483647;font:11px/1.2 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:6px;pointer-events:none">v18.9 · d88d780</div><script>window.CORUS_BUILD="d88d780";(function(){try{if(!/^https?:$/.test(location.protocol)||!("serviceWorker" in navigator))return;var B=window.CORUS_BUILD,now=Date.now(),LS=window.localStorage,K="pcssReloads",L=[];try{L=JSON.parse(LS.getItem(K)||"[]").filter(function(t){return now-t<30000;});}catch(e){}if(L.length>2){try{LS.setItem("pcssSafe",String(now));LS.removeItem(K);}catch(e){}navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});if(window.caches)caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});return;}var safe=+(LS.getItem("pcssSafe")||0);if(now-safe<600000){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});return;}var hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(function(){});navigator.serviceWorker.addEventListener("controllerchange",function(){if(!hadCtl||window.__rl)return;var g="pcssRL_"+B;try{if(LS.getItem(g))return;LS.setItem(g,"1");L.push(Date.now());LS.setItem(K,JSON.stringify(L));}catch(e){return;}window.__rl=1;var t=document.createElement("div");t.textContent="Updated to the newest version, reloading…";t.style.cssText="position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#0a7;color:#fff;padding:8px 14px;border-radius:8px;font:14px system-ui";document.body.appendChild(t);setTimeout(function(){location.reload();},900);});}catch(e){}})();</script></body></html>
